@@ -10,6 +10,8 @@
 
 include:
   - sift.packages.python3-virtualenv
+  - sift.packages.libusb-dev
+  - sift.packages.pkg-config
 
 sift-python3-package-volatility3-venv:
   virtualenv.managed:
@@ -28,6 +30,8 @@ sift-python3-package-volatility3-venv:
       - yara-x
     - require:
       - sls: sift.packages.python3-virtualenv
+      - sls: sift.packages.libusb-dev
+      - sls: sift.packages.pkg-config
 
 sift-python3-package-volatility3:
   pip.installed:
