@@ -16,8 +16,8 @@
 #
 #   - builds its venv at ~/.venv, a generic path shared with anything else
 #   - overwrites ~/.claude/CLAUDE.md (backing up first) with its orchestrator
-#   - runs `claude mcp add trudi-sift --scope user`, which needs the claude CLI that SIFT
-#     does not install by default (see sift/packages/claude-code.sls)
+#   - runs `claude mcp add trudi-sift --scope user`, per-user config that does not belong
+#     in an image build (the claude CLI itself is installed, see sift.packages.claude-code)
 #   - copies its bundled case studies into ~/cases
 #   - installs requirements-dev.txt and runs a 1100-test suite
 #
@@ -44,6 +44,8 @@ include:
   - sift.packages.git
   - sift.packages.build-essential
   - sift.packages.libssl-dev
+  # the agent side of TRUDI is driven through Claude Code
+  - sift.packages.claude-code
   # TRUDI shells out to these; all but binwalk are already part of SIFT
   - sift.packages.binwalk
   - sift.packages.libewf-tools
@@ -103,3 +105,4 @@ sift-python3-package-trudi-dashboard:
         exec "$TRUDI_DIR/bin/trudi-dashboard" "$@"
     - require:
       - pip: sift-python3-package-trudi
+      - sls: sift.packages.claude-code
