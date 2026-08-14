@@ -388,6 +388,28 @@ fixing blind. Listed so you don't "fix" them as a side effect of unrelated work.
 - `sift/pkgs.sls` and `sift/vm.sls` are legacy aliases for `sift.server` / `sift.desktop`,
   kept for older tooling.
 
+**Orphaned package states.** Fourteen files under `packages/` are referenced by nothing —
+not `packages/init.sls`, not any other state — so they have never been installed. They are
+left in place pending a decision on whether each should ship or be dropped. Don't assume
+a file existing here means the tool is on a SIFT box.
+
+Evidence points to most being leftovers from consumers that were later removed:
+
+| State | Why it is probably dead |
+| ----- | ----------------------- |
+| `apt-transport-https` | Obsolete — folded into apt itself since 1.5 |
+| `ewf-tools` | Superseded by gift's `libewf-tools`, which *is* registered |
+| `libyara3`, `swig`, `python3-m2crypto` | volatility2 / dpapick era; both tools are gone |
+| `libencode-perl` | Added for plutil perl deps |
+| `libpcap-dev`, `patch` | Build deps whose consumers no longer include them |
+| `libvhdi`, `python3-tsk` | Dropped by the imagemounter refactor in #177 |
+| `python3-keyrings-alt` | Survived the python3 reorg in #173 unreferenced |
+
+The other three are user-facing forensics tools that simply never got wired up, and are a
+product call rather than cleanup: `dos2unix`, `libguestfs-tools`, and `ugrep`. Note that
+`ugrep` would also need fixing before use — it installs from a hardcoded 20.04-era
+`amd64` `.deb` URL in the Ubuntu pool instead of the universe package, with no arch guard.
+
 **Real limitations:**
 
 - Two state-ID naming conventions coexist in `packages/` (bare `<name>:` and
