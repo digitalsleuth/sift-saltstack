@@ -94,9 +94,15 @@ that is only in `include:` still runs, but the aggregate `test.nop` no longer ga
 it, so ordering guarantees quietly weaken.
 
 Exception: a package that exists purely as a dependency of another state does not need
-an `init.sls` entry — it gets pulled in transitively by whoever `include:`s it. Roughly
-40 files under `packages/` are dependency-only this way (`libewf`, `swig`, `zlib1g-dev`,
-…). Only add to `init.sls` when the tool should be installed on its own merit.
+an `init.sls` entry — it gets pulled in transitively by whoever `include:`s it. 24 files
+under `packages/` are dependency-only this way (`libicu`, `zlib1g-dev`,
+`software-properties-common`, `dotnet`, …). Only add to `init.sls` when the tool should be
+installed on its own merit.
+
+But a state in neither `init.sls` **nor** any other state's `include:` is dead — it never
+runs, and nothing reports that. Fourteen packages sat that way for years, several of them
+receiving "updated for 24.04" commits while unreachable. Before adding a dependency-only
+state, confirm something actually includes it.
 
 ### Header comment block
 
@@ -403,28 +409,6 @@ fixing blind. Listed so you don't "fix" them as a side effect of unrelated work.
 - The default password hash in `config/user/user.sls` is the published SIFT default.
 - `sift/pkgs.sls` and `sift/vm.sls` are legacy aliases for `sift.server` / `sift.desktop`,
   kept for older tooling.
-
-**Orphaned package states.** Fourteen files under `packages/` are referenced by nothing —
-not `packages/init.sls`, not any other state — so they have never been installed. They are
-left in place pending a decision on whether each should ship or be dropped. Don't assume
-a file existing here means the tool is on a SIFT box.
-
-Evidence points to most being leftovers from consumers that were later removed:
-
-| State | Why it is probably dead |
-| ----- | ----------------------- |
-| `apt-transport-https` | Obsolete — folded into apt itself since 1.5 |
-| `ewf-tools` | Superseded by gift's `libewf-tools`, which *is* registered |
-| `libyara3`, `swig`, `python3-m2crypto` | volatility2 / dpapick era; both tools are gone |
-| `libencode-perl` | Added for plutil perl deps |
-| `libpcap-dev`, `patch` | Build deps whose consumers no longer include them |
-| `libvhdi`, `python3-tsk` | Dropped by the imagemounter refactor in #177 |
-| `python3-keyrings-alt` | Survived the python3 reorg in #173 unreferenced |
-
-The other three are user-facing forensics tools that simply never got wired up, and are a
-product call rather than cleanup: `dos2unix`, `libguestfs-tools`, and `ugrep`. Note that
-`ugrep` would also need fixing before use — it installs from a hardcoded 20.04-era
-`amd64` `.deb` URL in the Ubuntu pool instead of the universe package, with no arch guard.
 
 **Real limitations:**
 
