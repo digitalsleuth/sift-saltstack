@@ -1,6 +1,7 @@
 include:
   - sift.python3-packages.analyzemft
   - sift.python3-packages.python3-keyring
+  - sift.python3-packages.defang
   - sift.python3-packages.hindsight
   - sift.python3-packages.ioc-writer
   - sift.python3-packages.imagemounter
@@ -19,6 +20,7 @@ include:
   - sift.python3-packages.usbdeviceforensics
   - sift.python3-packages.usnparser
   - sift.python3-packages.volatility3
+  - sift.python3-packages.windowsprefetch
 
 sift-python3-packages:
   test.nop:
@@ -26,6 +28,7 @@ sift-python3-packages:
     - require:
       - sls: sift.python3-packages.analyzemft
       - sls: sift.python3-packages.python3-keyring
+      - sls: sift.python3-packages.defang
       - sls: sift.python3-packages.hindsight
       - sls: sift.python3-packages.ioc-writer
       - sls: sift.python3-packages.imagemounter
@@ -44,3 +47,4 @@ sift-python3-packages:
       - sls: sift.python3-packages.usbdeviceforensics
       - sls: sift.python3-packages.usnparser
       - sls: sift.python3-packages.volatility3
+      - sls: sift.python3-packages.windowsprefetch
