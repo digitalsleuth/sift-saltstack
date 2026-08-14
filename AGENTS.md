@@ -23,8 +23,7 @@ Upstream repo: `git@github.com:teamdfir/sift-saltstack.git`. Issues live in the
 
 `.cast.yml` is the source of truth: **Ubuntu 22.04 (jammy)** and **24.04 (noble)**, on
 **amd64 and arm64**. Salt **3006** and **3007** are both tested. Focal (20.04) is EOL and
-should not be added to new code paths, though stale references to it remain (see
-[Known rough edges](#known-rough-edges)).
+should not be added to new code paths.
 
 ## Layout
 
@@ -38,14 +37,13 @@ sift/
   include-server.sls       server  = repos + python3-packages + packages + scripts
   repos/                   apt repos and PPAs (gift, sift, docker, microsoft, ubuntu-*)
   packages/                ~240 files, one apt package or .deb per file
-    absent/                packages to remove (currently not wired in)
   python3-packages/        tools installed into per-tool virtualenvs under /opt
   perl-packages/           CPAN modules via cpanm
   scripts/                 tools installed from tarballs/zips/git, plus wrappers
   config/                  hostname, timezone, folders, samba, user/ (desktop only)
   files/                   static payloads served via salt://sift/files/...
   tests/                   aggregate states used by the weekly CI job only
-.ci/                       Travis-era helper scripts (dead — see Known rough edges)
+.ci/                       local dev helpers: test-state.sh, shell.sh
 .github/workflows/         the CI that actually runs
 ```
 
@@ -218,11 +216,32 @@ themselves; prefer `/var/cache/sift/archives/`.
 `skip_verify: True` appears in four places and should be treated as a defect, not a
 pattern to copy — this is a forensics distribution and unverified downloads undermine it.
 
-The renovate config in `.github/renovate.json` auto-bumps pins, but only when the
-annotation matches its regex exactly: a `{# renovate: datasource=... depName=... #}`
-comment, then a line `set version = "..."`, then a line `set hash = "..."`. Only
-`powershell.sls` and `radare2.sls` currently satisfy it; every other pinned file must be
-bumped by hand. If you add a pinned download, add the annotation in that exact shape.
+The renovate config in `.github/renovate.json` auto-bumps pins when the file carries a
+`{# renovate: datasource=... depName=... #}` comment followed by a `set version = "..."`
+line. A `set hash = "..."` line after it is picked up as the digest if present, and
+skipped if not — so version-only pins whose `source_hash` is a remote `.sha256` URL work
+too. Matching is done against whole-file content with the dotAll flag, so the comment and
+the `set` lines need not be adjacent.
+
+Two cases where you should **not** add an annotation, because renovate would make things
+worse rather than better:
+
+- **Two arch-specific hashes in one file** (`radare2.sls`, `aws-cli.sls`,
+  `claude-code.sls`). The manager captures a single digest, so a bump refreshes one arch's
+  hash and leaves the other stale — an install that fails its `source_hash` check on that
+  arch. `radare2.sls` is annotated and has this limitation today.
+- **Downloads hosted off GitHub** (`aws-cli.sls` → `awscli.amazonaws.com`,
+  `claude-code.sls` → a Google Storage bucket). Renovate can find the version but cannot
+  compute the new digest, so it would bump the version against a stale hash.
+
+Also do not annotate `repos/sift.sls` or `repos/gift.sls`: their `version` variable holds
+a PPA channel name (`stable`/`dev`) from a pillar, not a version number.
+
+If you change the regex, validate it the way renovate applies it — compiled with the `s`
+flag against whole-file content. A greedy `(?<currentValue>.*)` silently swallows
+following lines and yields a `currentValue` that is not a version, which renovate then
+drops on the floor; that bug sat in this config for years and only looked like it worked
+because the one annotated file happened to have a single `hash =` literal.
 
 ### Python tools go in their own virtualenv
 
@@ -274,12 +293,14 @@ Payloads live under `sift/files/<tool>/` and are referenced as
 `salt://sift/files/<tool>/<name>`. Use `file.managed` for one file, `file.recurse` for a
 tree.
 
-### No render-time network calls
+### Render-time network calls are a deliberate exception, not a pattern
 
 `scripts/exiftool.sls` calls `salt['http.query']` during Jinja rendering to discover the
-latest version and hash. Do not copy this: it makes the state non-reproducible, breaks
-offline/air-gapped installs, and means a highstate can silently install a different
-version than it did yesterday. Pin explicitly instead.
+latest version and its checksum. That was an intentional choice (PR #195,
+`exiftool_dynamic_update`) because exiftool releases far more often than this repo does —
+don't "fix" it. But don't copy it either: it makes the state non-reproducible, breaks
+offline and air-gapped installs, and means a highstate can install a different version
+than it did yesterday. For anything else, pin explicitly.
 
 ## Testing
 
@@ -298,23 +319,34 @@ salt-call --local -l info --file-root . --retcode-passthrough \
 To reproduce locally, from the repo root (requires a working container runtime):
 
 ```console
-docker run --rm -it -v "$PWD:/srv/salt" -w /srv/salt \
-  ghcr.io/ekristen/cast-tools/saltstack-tester:22.04-3007 \
-  salt-call --local -l info --file-root . --retcode-passthrough \
-    --state-output=mixed state.sls sift.packages.newtool pillar='{sift_user: root}'
+.ci/test-state.sh sift.packages.newtool           # defaults to 22.04 / salt 3007
+OS=24.04 SALT=3006 .ci/test-state.sh sift.packages.newtool
 ```
 
-Swap the tag for `24.04-3007`, `22.04-3006`, etc. to cover the rest of the matrix.
-`--file-root .` is what makes `sift.packages.newtool` resolve to `./sift/packages/newtool.sls`,
-so the working directory must be the repo root.
+`.ci/shell.sh` drops you into the same image with the tree mounted, for poking at a state
+by hand. Both accept `DOCKER=nerdctl` (or podman) if that's your runtime. They mount the
+repo root and pass `--file-root .`, matching CI — that flag is what makes
+`sift.packages.newtool` resolve to `./sift/packages/newtool.sls`, so the working directory
+must be the repo root.
 
-Because CI only tests *changed* states in isolation, two classes of breakage get through:
-a change to an `init.sls` (explicitly filtered out), and a change that breaks another
-state's dependency ordering. Check both by hand when touching shared states like
-`repos/*` or `packages/python3*`.
+Available image tags are `22.04-3006`, `22.04-3007`, `24.04-3006`, `24.04-3007`. The
+codename forms (`jammy-3007`, `noble-3007`) are aliases for the same images.
+
+**Mind the CI gap.** Because the workflow tests only *changed*, non-`init` states in
+isolation, three classes of change go completely untested:
+
+- editing an `init.sls` — explicitly filtered out, so **registering a new state does not
+  get that state tested**. If you wire up a state without touching the state file itself,
+  run it locally.
+- a change that breaks some *other* state's dependency ordering.
+- anything under `sift/files/`, which never matches the `.sls` filter.
+
+Check those by hand, especially when touching shared states like `repos/*` or
+`packages/python3*`.
 
 `.github/workflows/weekly-tests.yml` runs a fixed set of aggregate states
-(`sift.packages.python3`, `sift.tests.gift`, `sift.config.user.pdfs`) on a Monday cron.
+(`sift.packages.python3`, `sift.tests.gift`, `sift.tests.libewf`,
+`sift.config.user.pdfs`) on a Monday cron.
 
 ## Adding a tool — checklist
 
@@ -335,65 +367,43 @@ state's dependency ordering. Check both by hand when touching shared states like
 Releases are cut by cast, driven by `.cast.yml`, and tagged `vYYYY.MM.DD` (with
 `-rcN` for prereleases). Signing keys live in `pgp.pub` and `cosign.pub`.
 
-Do not use `.ci/tag-and-sign.sh` or `.ci/publish-draft.sh` — they are Travis-era, hardcode
-an old GPG key ID and a `sans-dfir` repo path, push directly to `master`, and
-`publish-draft.sh` has a malformed URL. They are kept only as history.
+`VERSION` is vestigial. Its only consumer was a Travis-era release script that no longer
+exists, and nothing in the tree or in the cast binary reads it. It is currently synced to
+the latest tag by hand; either wire it into the release process or delete it.
 
 ## Known rough edges
 
-Pre-existing issues found while surveying the tree. None were introduced by recent work;
-they are listed so you don't mistake them for conventions or "fix" them accidentally as
-part of an unrelated change.
+Things that look like bugs but are deliberate, plus real limitations that are not worth
+fixing blind. Listed so you don't "fix" them as a side effect of unrelated work.
 
-**Silently-ignored requisites** (Salt swallows misspelled requisite keys):
+**Deliberate, leave alone:**
 
-- `sift/include-desktop.sls:8` uses `- requires:` instead of `- require:`, so the desktop
-  aggregate does not actually wait on `sift.server` or `sift.config`.
-- `sift/scripts/exiftool.sls:43` uses `- include:` as a requisite on a `cmd.run`, so
-  `perl Makefile.PL` is not ordered after `build-essential` and `perl` are installed.
-  The same file's `sift-exiftool-makefile` also does not require `sift-exiftool-extracted`.
-- `sift/desktop.sls:8` requires `sls: sift.include-server` where it means
-  `sift.include-desktop`. It resolves transitively today, so it works by accident.
+- `sift/packages/claude-code.sls` is unreachable from both entrypoints on purpose —
+  commit `34b42da`, "do not install claude by default".
+- `sift/tests/*.sls` are intentionally outside the main include graph; the weekly workflow
+  invokes them directly.
+- `scripts/exiftool.sls` resolves its version and hash over the network at render time
+  (PR #195). See the section above.
+- The default password hash in `config/user/user.sls` is the published SIFT default.
+- `sift/pkgs.sls` and `sift/vm.sls` are legacy aliases for `sift.server` / `sift.desktop`,
+  kept for older tooling.
 
-**Dead code — reachable from neither `sift.desktop` nor `sift.server`:**
+**Real limitations:**
 
-- `sift/config/symlinks.sls` and `sift/config/rclocal.sls` are not in `config/init.sls`.
-  `symlinks.sls` additionally requires `pkg: python-plaso`, a state ID that does not
-  exist (the real one is `sift-package-python3-plaso`), so wiring it up as-is would fail.
-- `sift/packages/absent/` (`binplist`, `unity-webapps-common`) is never included, so
-  those intended removals never happen.
-- `sift/python3-packages/defang.sls`, `sift/python3-packages/windowsprefetch.sls`,
-  `sift/scripts/docker-compose.sls`, `sift/repos/ubuntu-tweak.sls`,
-  `sift/perl-packages/dbd-sqlite.sls` are absent from their `init.sls`.
-- `sift/packages/claude-code.sls` is unreachable **on purpose** — commit `34b42da`
-  ("do not install claude by default"). Leave it that way.
-- `sift/tests/*.sls` are intentionally out of the main graph; the weekly job calls them
-  directly.
-
-**Stale CI and tooling:**
-
-- Everything in `.ci/` is Travis-era and non-functional: the scripts read `TRAVIS_COMMIT`,
-  `TRAVIS_TAG`, and `TRAVIS_EVENT_TYPE`; `test.sh` invokes `./scripts/*.sh` from a
-  directory that no longer exists; and they reference three different, now-defunct tester
-  images (`sansdfir/sift-salt-tester`, `sift-salt-tester`,
-  `ghcr.io/teamdfir/sift-saltstack-tester`). CI actually uses
-  `ghcr.io/ekristen/cast-tools/saltstack-tester`. Several default to `DISTRO=focal`.
-- `Dockerfile` (Ubuntu 18.04, `apt-key add`) and `Dockerfile.jammy3005` are referenced by
-  nothing.
-- `weekly-tests.yml` still matrixes Ubuntu 20.04, which `.cast.yml` does not support, and
-  builds its image tag from `matrix.code` (`jammy-3006`) while `tests.yml` uses
-  `matrix.os` (`22.04-3006`) — at most one of those tag formats can be right.
-- `tests.yml` defines `matrix.code` in its `include:` block but never references it.
-
-**Drifted metadata:**
-
-- `VERSION` says `v2020.01.01-rc1`; the latest tag is `v2026.04.21`. Nothing reads
-  `VERSION` any more except the dead release scripts.
-- `README.md` lists Ubuntu 20.04 (deprecated) and 22.04; `.cast.yml` declares 22.04 and
-  24.04. The README never mentions noble.
-- `repos/sift.sls`, `repos/gift.sls`, `repos/openjdk.sls`, and `repos/dotnet-backports.sls`
-  all set `keyserver: hkp://p80.pool.sks-keyservers.net:80`. The SKS pool was shut down in
-  2021, so key fetches fall back to whatever apt/gpg does by default.
+- Two state-ID naming conventions coexist in `packages/` (bare `<name>:` and
+  `sift-package-<name>:`). Not unifiable without breaking requisites that reference IDs.
+- The header comment block is on roughly a quarter of `packages/`. Add it to files you
+  touch; a tree-wide backfill would need per-tool research.
+- `skip_verify: True` survives in four places: `repos/microsoft.sls` and `repos/docker.sls`
+  fetch GPG keys that upstream rotates, and `scripts/zimmerman.sls` and
+  `python3-packages/machinae.sls` pull rolling "latest" artifacts with no stable checksum
+  to pin. Each is a real gap for a forensics distro, but pinning them as-is would break
+  installs on the next upstream refresh. Don't add new ones.
+- `scripts/zimmerman.sls` relies on Salt's declaration-order execution rather than explicit
+  requisites between its download, extract, wrapper and cleanup states. It works because
+  `state_auto_order` defaults on, but it is fragile.
+- Renovate cannot manage dual-arch hashes or non-GitHub-hosted downloads. See the
+  version-pinning section for which files that affects and why.
 
 ## Things not to do
 
@@ -406,4 +416,5 @@ part of an unrelated change.
 - Don't hardcode `amd64` or an Ubuntu codename — branch on grains.
 - Don't change the default password hash in `sift/config/user/user.sls`; it is the
   documented, public SIFT default and tooling depends on it.
-- Don't revive `.ci/` scripts or the `Dockerfile`s in passing.
+- Don't assume registering a state in `init.sls` gets it tested — CI filters `init.sls`
+  out. Run it locally with `.ci/test-state.sh`.
