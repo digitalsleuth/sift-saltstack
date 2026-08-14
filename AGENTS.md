@@ -402,6 +402,10 @@ fixing blind. Listed so you don't "fix" them as a side effect of unrelated work.
 
 - `sift/packages/claude-code.sls` is unreachable from both entrypoints on purpose —
   commit `34b42da`, "do not install claude by default".
+- `sift/scripts/mulder.sls` is likewise opt-in on purpose. It needs an LLM API key, pulls
+  a 3.6 GB image on first run, and sends evidence content to a third-party provider, so
+  it is not in `scripts/init.sls`. **Do not "fix" this by registering it**, and do not
+  sweep it up as dead code — apply `sift.scripts.mulder` explicitly to install it.
 - `sift/tests/*.sls` are intentionally outside the main include graph; the weekly workflow
   invokes them directly.
 - `scripts/exiftool.sls` resolves its version and hash over the network at render time
