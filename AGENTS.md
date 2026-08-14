@@ -402,10 +402,15 @@ fixing blind. Listed so you don't "fix" them as a side effect of unrelated work.
 
 - `sift/packages/claude-code.sls` is unreachable from both entrypoints on purpose —
   commit `34b42da`, "do not install claude by default".
-- `sift/scripts/mulder.sls` is likewise opt-in on purpose. It needs an LLM API key, pulls
-  a 3.6 GB image on first run, and sends evidence content to a third-party provider, so
-  it is not in `scripts/init.sls`. **Do not "fix" this by registering it**, and do not
-  sweep it up as dead code — apply `sift.scripts.mulder` explicitly to install it.
+- `sift/scripts/mulder.sls` is likewise opt-in on purpose. It fetches a 3.6 GB container
+  image, needs an LLM API key to use, and sends evidence content to a third-party
+  provider, so it is not in `scripts/init.sls`. **Do not "fix" this by registering it**,
+  and do not sweep it up as dead code — apply `sift.scripts.mulder` explicitly.
+  It is also the one state that cannot run in the tester container, because pulling an
+  image needs a live docker daemon. It is listed in `SKIP_STATES` in
+  `.github/workflows/tests.yml` so the changed-states job skips it instead of failing —
+  which means **changes to it are never verified by CI**. Apply it by hand on a real
+  target before merging. Keep that skip list as short as possible.
 - `sift/tests/*.sls` are intentionally outside the main include graph; the weekly workflow
   invokes them directly.
 - `scripts/exiftool.sls` resolves its version and hash over the network at render time

@@ -21,8 +21,13 @@ jobs:
         with:
           format: "json"
       - id: filter
+        # States needing a running docker daemon cannot be applied inside the tester
+        # container, so they are excluded here rather than left to fail. Keep this list
+        # as short as possible and note the reason in the state's header.
+        env:
+          SKIP_STATES: '["sift.scripts.mulder"]'
         run: |
-          echo "filtered_files=$(jq -rMc '[.[] | select(. | contains(".sls")) | select(. | contains("init") | not) | sub("/"; "."; "g") | sub(".sls"; ""; "g")]' <<< '${{ steps.files.outputs.added_modified }}')" > $GITHUB_OUTPUT
+          echo "filtered_files=$(jq -rMc --argjson skip "$SKIP_STATES" '[.[] | select(. | contains(".sls")) | select(. | contains("init") | not) | sub("/"; "."; "g") | sub(".sls"; ""; "g") | select([.] | inside($skip) | not)]' <<< '${{ steps.files.outputs.added_modified }}')" > $GITHUB_OUTPUT
     outputs:
       matrix: ${{ steps.filter.outputs.filtered_files }}
 
