@@ -35,11 +35,6 @@ jobs:
         salt: [3007, 3006]
         os: [22.04, 24.04]
         state: ${{ fromJson(needs.changed_states.outputs.matrix) }}
-        include:
-          - os: 24.04
-            code: noble
-          - os: 22.04
-            code: jammy
     container:
       image: docker://ghcr.io/ekristen/cast-tools/saltstack-tester:${{ matrix.os }}-${{ matrix.salt }}
     steps:
