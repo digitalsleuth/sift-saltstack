@@ -159,8 +159,19 @@ sift-package-libewf:
 Watch the spelling: the requisite is `require`, not `requires`, and `include` is not a
 requisite. Salt state functions accept `**kwargs`, so a misspelled requisite is
 **silently ignored** rather than raising — the state appears to work and the ordering
-guarantee is simply gone. Two existing files have this bug (see
-[Known rough edges](#known-rough-edges)).
+guarantee is simply gone.
+
+### Jinja whitespace control will eat your state
+
+A `{%- ... -%}` tag strips whitespace on the trimmed side, newlines included. Putting a
+header comment above a leading `{%- set ... %}` therefore splices the last comment line
+onto whatever follows, commenting out the first state in the file. Salt reports this as
+`ID <module.function> in SLS <name> is not a dictionary`, which points at the state
+rather than the comment. Use `{% set` (no leading dash) for the first tag after a comment
+block — `sift/packages/claude-code.sls` carries a note where it bit.
+
+Since Jinja renders before YAML parses, `{#` also opens a Jinja comment. That makes
+`${#array[@]}` unwritable inside a `contents:` block; restructure the shell instead.
 
 ### Pillars
 
@@ -400,8 +411,10 @@ fixing blind. Listed so you don't "fix" them as a side effect of unrelated work.
 
 **Deliberate, leave alone:**
 
-- `sift/packages/claude-code.sls` is unreachable from both entrypoints on purpose —
-  commit `34b42da`, "do not install claude by default".
+- `sift/packages/claude-code.sls` ships by default and cannot be managed by renovate — it
+  is hosted off GitHub with one hash per arch, so the custom manager can only carry a
+  single digest. Bump it by hand; the file records how. It was opt-in between `34b42da`
+  and the commit that re-enabled it, so older discussion may say otherwise.
 - `sift/scripts/mulder.sls` is likewise opt-in on purpose. It fetches a 3.6 GB container
   image, needs an LLM API key to use, and sends evidence content to a third-party
   provider, so it is not in `scripts/init.sls`. **Do not "fix" this by registering it**,
