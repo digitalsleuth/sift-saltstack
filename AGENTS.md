@@ -411,6 +411,15 @@ fixing blind. Listed so you don't "fix" them as a side effect of unrelated work.
   `.github/workflows/tests.yml` so the changed-states job skips it instead of failing —
   which means **changes to it are never verified by CI**. Apply it by hand on a real
   target before merging. Keep that skip list as short as possible.
+- `sift/python3-packages/trudi.sls` is opt-in for the same reason — full use needs an
+  `ANTHROPIC_API_KEY` and sends evidence content to the provider. It does run in CI.
+  `sift/packages/binwalk.sls` exists only as its dependency and is intentionally not in
+  `packages/init.sls`, so the default image is unchanged.
+  Do not switch it to upstream's `install.sh`: that script builds its venv at the generic
+  `~/.venv`, overwrites `~/.claude/CLAUDE.md`, runs `claude mcp add --scope user`, copies
+  case studies into `~/cases`, and runs an 1100-test suite — all wrong for an image build.
+  It is also pinned to a commit on `main` rather than its `1.0.0` tag on purpose: the tag
+  predates the fixes that make it work on SIFT at all.
 - `sift/tests/*.sls` are intentionally outside the main include graph; the weekly workflow
   invokes them directly.
 - `scripts/exiftool.sls` resolves its version and hash over the network at render time
