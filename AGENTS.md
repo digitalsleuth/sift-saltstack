@@ -323,14 +323,30 @@ To reproduce locally, from the repo root (requires a working container runtime):
 OS=24.04 SALT=3006 .ci/test-state.sh sift.packages.newtool
 ```
 
-`.ci/shell.sh` drops you into the same image with the tree mounted, for poking at a state
-by hand. Both accept `DOCKER=nerdctl` (or podman) if that's your runtime. They mount the
-repo root and pass `--file-root .`, matching CI — that flag is what makes
-`sift.packages.newtool` resolve to `./sift/packages/newtool.sls`, so the working directory
-must be the repo root.
+`.ci/shell.sh` drops you into the same image with the tree at `/srv/salt`, for poking at a
+state by hand. Both accept `DOCKER=nerdctl` (or podman) if that's your runtime, and pass
+`--file-root .` exactly as CI does — that flag is what makes `sift.packages.newtool`
+resolve to `./sift/packages/newtool.sls`, so run them from the repo root.
+
+Both work against a remote docker context. `.ci/lib.sh` checks the context endpoint and
+streams the tree in over stdin when the daemon is remote, because a bind mount would
+otherwise resolve on the remote host and hand salt an **empty state tree** — which is not
+an error, so it looks like a state that does nothing. Keep that in mind if you write your
+own container invocation.
 
 Available image tags are `22.04-3006`, `22.04-3007`, `24.04-3006`, `24.04-3007`. The
 codename forms (`jammy-3007`, `noble-3007`) are aliases for the same images.
+
+Rendering the whole graph without installing anything is a fast way to catch broken
+requisites and Jinja errors:
+
+```console
+salt-call --local --file-root . state.show_sls sift.desktop pillar='{sift_user: root}'
+```
+
+Pass the pillar — several states under `config/user/` call `salt['user.info'](user).home`,
+which fails to render when `sift_user` defaults to a `sansforensics` account that does not
+exist in a fresh container.
 
 **Mind the CI gap.** Because the workflow tests only *changed*, non-`init` states in
 isolation, three classes of change go completely untested:
