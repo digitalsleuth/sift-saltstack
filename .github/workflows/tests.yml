@@ -21,11 +21,14 @@ jobs:
         with:
           format: "json"
       - id: filter
-        # States needing a running docker daemon cannot be applied inside the tester
-        # container, so they are excluded here rather than left to fail. Keep this list
-        # as short as possible and note the reason in the state's header.
+        # States that cannot be applied inside the tester container are excluded here
+        # rather than left to fail. Nothing needs it today -- sift.scripts.mulder did,
+        # until it stopped fetching a container image -- but keep the variable: jq reads
+        # it through --argjson and an empty list means "skip nothing". If you add an
+        # entry, note the reason in the state's header; a skipped state gets no CI
+        # coverage at all and has to be applied by hand on a real target.
         env:
-          SKIP_STATES: '["sift.scripts.mulder"]'
+          SKIP_STATES: '[]'
         run: |
           echo "filtered_files=$(jq -rMc --argjson skip "$SKIP_STATES" '[.[] | select(. | contains(".sls")) | select(. | contains("init") | not) | sub("/"; "."; "g") | sub(".sls"; ""; "g") | select([.] | inside($skip) | not)]' <<< '${{ steps.files.outputs.added_modified }}')" > $GITHUB_OUTPUT
     outputs:

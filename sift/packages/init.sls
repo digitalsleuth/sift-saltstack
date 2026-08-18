@@ -200,6 +200,7 @@ include:
   - sift.packages.xdot
   - sift.packages.xfsprogs
   - sift.packages.xmount
+  - sift.packages.yara
   - sift.packages.zenity
   - sift.packages.python3-debian
 
@@ -408,5 +409,6 @@ sift-packages:
       - sls: sift.packages.xdot
       - sls: sift.packages.xfsprogs
       - sls: sift.packages.xmount
+      - sls: sift.packages.yara
       - sls: sift.packages.zenity
       - sls: sift.packages.python3-debian

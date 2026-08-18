@@ -415,15 +415,26 @@ fixing blind. Listed so you don't "fix" them as a side effect of unrelated work.
   is hosted off GitHub with one hash per arch, so the custom manager can only carry a
   single digest. Bump it by hand; the file records how. It was opt-in between `34b42da`
   and the commit that re-enabled it, so older discussion may say otherwise.
-- `sift/scripts/mulder.sls` is likewise opt-in on purpose. It fetches a 3.6 GB container
-  image, needs an LLM API key to use, and sends evidence content to a third-party
-  provider, so it is not in `scripts/init.sls`. **Do not "fix" this by registering it**,
-  and do not sweep it up as dead code — apply `sift.scripts.mulder` explicitly.
-  It is also the one state that cannot run in the tester container, because pulling an
-  image needs a live docker daemon. It is listed in `SKIP_STATES` in
-  `.github/workflows/tests.yml` so the changed-states job skips it instead of failing —
-  which means **changes to it are never verified by CI**. Apply it by hand on a real
-  target before merging. Keep that skip list as short as possible.
+- `sift/python3-packages/mulder.sls` is likewise opt-in on purpose — it needs an LLM API
+  key to use and sends evidence content to a third-party provider, so it is not in
+  `python3-packages/init.sls`. **Do not "fix" this by registering it**, and do not sweep
+  it up as dead code — apply `sift.python3-packages.mulder` explicitly. It lived at
+  `sift/scripts/mulder.sls` and fetched a 3.6 GB container image until upstream published
+  `mulder-dfir` on PyPI, so older discussion describes a docker pull that is gone.
+  It does run in CI now, and `SKIP_STATES` in `.github/workflows/tests.yml` is empty as a
+  result — but only the venv, the pinned install and the wrappers are covered. The
+  `mulder setup` step that fetches ~2.2 GB of assets is skipped under the `sift_user: root`
+  pillar CI uses, because upstream refuses to provision assets as root. **That step is
+  never verified by CI**; apply it by hand on a real target before merging. The state says
+  so out loud via `test.show_notification` rather than skipping quietly, and fails hard
+  when `sift_user` names an account that does not exist.
+  Assets go to `/opt/mulder-assets` and the `/usr/local/bin` entry points are wrappers,
+  not symlinks, because `MULDER_ASSET_ROOT` has to be exported at run time as well as at
+  setup time. `sift/packages/yara.sls` was added for it and *is* registered in
+  `packages/init.sls` — SIFT shipped the `python3-yara` module but never the scanner.
+  `binutils.sls`, `libpango.sls` and `libharfbuzz.sls` are dependency-only in the
+  `binwalk.sls` sense; the last two are WeasyPrint's run-time stack for the `pdf` extra,
+  which pip installs happily without and then fails at import.
 - `sift/python3-packages/trudi.sls` is opt-in for the same reason — full use needs an
   `ANTHROPIC_API_KEY` and sends evidence content to the provider. It does run in CI.
   `sift/packages/binwalk.sls` exists only as its dependency and is intentionally not in
