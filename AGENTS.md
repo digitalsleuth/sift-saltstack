@@ -415,30 +415,31 @@ fixing blind. Listed so you don't "fix" them as a side effect of unrelated work.
   is hosted off GitHub with one hash per arch, so the custom manager can only carry a
   single digest. Bump it by hand; the file records how. It was opt-in between `34b42da`
   and the commit that re-enabled it, so older discussion may say otherwise.
-- `sift/python3-packages/mulder.sls` is likewise opt-in on purpose — it needs an LLM API
-  key to use and sends evidence content to a third-party provider, so it is not in
-  `python3-packages/init.sls`. **Do not "fix" this by registering it**, and do not sweep
-  it up as dead code — apply `sift.python3-packages.mulder` explicitly. It lived at
-  `sift/scripts/mulder.sls` and fetched a 3.6 GB container image until upstream published
-  `mulder-dfir` on PyPI, so older discussion describes a docker pull that is gone.
-  It does run in CI now, and `SKIP_STATES` in `.github/workflows/tests.yml` is empty as a
-  result — but only the venv, the pinned install and the wrappers are covered. The
-  `mulder setup` step that fetches ~2.2 GB of assets is skipped under the `sift_user: root`
-  pillar CI uses, because upstream refuses to provision assets as root. **That step is
-  never verified by CI**; apply it by hand on a real target before merging. The state says
-  so out loud via `test.show_notification` rather than skipping quietly, and fails hard
-  when `sift_user` names an account that does not exist.
-  Assets go to `/opt/mulder-assets` and the `/usr/local/bin` entry points are wrappers,
-  not symlinks, because `MULDER_ASSET_ROOT` has to be exported at run time as well as at
-  setup time. `sift/packages/yara.sls` was added for it and *is* registered in
-  `packages/init.sls` — SIFT shipped the `python3-yara` module but never the scanner.
-  `binutils.sls`, `libpango.sls` and `libharfbuzz.sls` are dependency-only in the
-  `binwalk.sls` sense; the last two are WeasyPrint's run-time stack for the `pdf` extra,
-  which pip installs happily without and then fails at import.
-- `sift/python3-packages/trudi.sls` is opt-in for the same reason — full use needs an
-  `ANTHROPIC_API_KEY` and sends evidence content to the provider. It does run in CI.
-  `sift/packages/binwalk.sls` exists only as its dependency and is intentionally not in
-  `packages/init.sls`, so the default image is unchanged.
+- `sift/python3-packages/mulder.sls` ships by default. It needs an LLM API key to do
+  anything and sends evidence content to a third-party provider, which is why it was
+  opt-in until the commit that registered it — older discussion says it is not in
+  `init.sls`, and describes a `sift/scripts/mulder.sls` that fetched a 3.6 GB container
+  image. Both predate the move to the PyPI package.
+  Its `mulder setup` step fetches ~2.2 GB of assets into `/opt/mulder-assets` as
+  `sift_user`, so it dominates image build time. That step is skipped under the
+  `sift_user: root` pillar CI uses, because upstream refuses to provision assets as root
+  — the state says so via `test.show_notification` rather than skipping quietly, and
+  fails hard when `sift_user` names an account that does not exist. **The asset step is
+  never verified by CI**; apply it by hand on a real target. Everything else — venv,
+  pinned install, wrappers — does run in CI, and `SKIP_STATES` in
+  `.github/workflows/tests.yml` is empty as a result.
+  The `/usr/local/bin` entry points are wrappers, not symlinks, because
+  `MULDER_ASSET_ROOT` has to be exported at run time as well as at setup time.
+  `sift/packages/yara.sls` was added for it and is registered in `packages/init.sls` —
+  SIFT shipped the `python3-yara` module but never the scanner. `binutils.sls`,
+  `libpango.sls` and `libharfbuzz.sls` stay dependency-only and arrive transitively; the
+  last two are WeasyPrint's run-time stack for the `pdf` extra, which pip installs
+  happily without and then fails at import.
+- `sift/python3-packages/trudi.sls` ships by default as well, and was opt-in for the same
+  reason — full use needs an `ANTHROPIC_API_KEY` and sends evidence content to the
+  provider. It runs in CI. `sift/packages/binwalk.sls` exists only as its dependency and
+  is deliberately not in `packages/init.sls`; it is no longer dead, since registering
+  trudi pulls it in transitively.
   Do not switch it to upstream's `install.sh`: that script builds its venv at the generic
   `~/.venv`, overwrites `~/.claude/CLAUDE.md`, runs `claude mcp add --scope user`, copies
   case studies into `~/cases`, and runs an 1100-test suite — all wrong for an image build.

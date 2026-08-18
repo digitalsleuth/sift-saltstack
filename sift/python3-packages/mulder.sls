@@ -14,11 +14,11 @@
 #   mulder report my-case                  # markdown + HTML + PDF
 #   mulder export-iocs my-case             # STIX by default
 #
-# Opt-in on purpose, and NOT registered in python3-packages/init.sls: mulder needs an LLM
-# provider credential (ANTHROPIC_API_KEY, `claude /login`, or the Bedrock/Vertex variables)
-# and sends evidence content to whichever provider is configured. Apply it explicitly:
-#
-#   sudo salt-call --local state.sls sift.python3-packages.mulder
+# Registered in python3-packages/init.sls, so this ships on every image. Mulder still
+# needs an LLM provider credential to do anything (ANTHROPIC_API_KEY, `claude /login`, or
+# the Bedrock/Vertex variables) and sends evidence content to whichever provider is
+# configured -- installing it does not, by itself, transmit anything. It was opt-in until
+# the commit that registered it, so older discussion says otherwise.
 #
 # `mulder setup` fetches the ~2.2 GB pip cannot ship -- MITRE ATT&CK, Sigma, the YARA
 # signature-base, the Didier Stevens suite, Chainsaw, Hayabusa, Zircolite, capa, FLOSS,
